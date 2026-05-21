@@ -2937,9 +2937,60 @@ function dmKeyDown(ev){
 }
 
 function startDMPolling(userId){
-  // Polling não disponível em modo local — use o app Slack para respostas em tempo real
+  stopDMPolling();
   var ind=document.getElementById('dm-polling-ind');
-  if(ind) ind.style.display='none';
+  if(ind) ind.style.display='flex';
+  // Guarda o timestamp da última mensagem lida no canal
+  if(!dmLastTs[userId]) dmLastTs[userId] = String(Date.now()/1000);
+
+  dmPollingTimer=setInterval(async function(){
+    if(!activeDMUser||activeDMUser.id!==userId) return;
+    try{
+      // Lê mensagens novas do canal #xtay-assistente
+      var resp=await fetch('/api/claude',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          _slack_read: true,
+          channel: 'C0B5BJ3BC9Y',
+          oldest: dmLastTs[userId]
+        })
+      });
+      var data=await resp.json();
+      if(!data.ok||!data.messages||!data.messages.length) return;
+
+      // Filtra só mensagens novas (não do bot, relacionadas à pessoa ativa)
+      var newMsgs=data.messages.filter(function(m){
+        return parseFloat(m.ts) > parseFloat(dmLastTs[userId]) &&
+               m.bot_id === undefined && // não é o bot
+               m.text && m.text.length > 0;
+      });
+      if(!newMsgs.length) return;
+
+      // Atualiza o timestamp
+      dmLastTs[userId]=newMsgs[newMsgs.length-1].ts;
+
+      // Adiciona as mensagens ao chat
+      newMsgs.forEach(function(m){
+        if(!dmMessages[userId]) dmMessages[userId]=[];
+        // Verifica se já existe
+        var exists=dmMessages[userId].some(function(x){return x.slackTs===m.ts;});
+        if(!exists){
+          dmMessages[userId].push({
+            id:'slack_'+m.ts,
+            ts:parseFloat(m.ts)*1000,
+            text:m.text,
+            fromMe:false,
+            user:m.username||'Slack',
+            source:'slack',
+            slackTs:m.ts
+          });
+        }
+      });
+      dmMessages[userId].sort(function(a,b){return a.ts-b.ts;});
+      renderDMMessages(userId);
+    }catch(e){ /* polling silencioso */ }
+  },15000);
 }
 
 function stopDMPolling(){

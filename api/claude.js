@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   const anthropicKey = process.env.ANTHROPIC_KEY
   const slackToken   = process.env.SLACK_TOKEN
 
-  // ── Rota Slack direta (sem MCP) ──────────────────────────
+  // ── Rota Slack direta: envio ────────────────────────────
   if (req.body && req.body._slack_direct) {
     if (!slackToken) return res.status(500).json({ ok: false, error: 'SLACK_TOKEN não configurado' })
     const { channel, text } = req.body
@@ -21,6 +21,26 @@ export default async function handler(req, res) {
       body: JSON.stringify({ channel, text })
     })
     const slackData = await slackResp.json()
+    return res.status(200).json(slackData)
+  }
+
+  // ── Rota Slack direta: leitura (polling) ─────────────────
+  if (req.body && req.body._slack_read) {
+    if (!slackToken) return res.status(500).json({ ok: false, error: 'SLACK_TOKEN não configurado' })
+    const { channel, oldest } = req.body
+    const url = new URL('https://slack.com/api/conversations.history')
+    url.searchParams.set('channel', channel)
+    url.searchParams.set('oldest', oldest || '0')
+    url.searchParams.set('limit', '20')
+    url.searchParams.set('inclusive', 'false')
+    const slackResp = await fetch(url.toString(), {
+      headers: { 'Authorization': 'Bearer ' + slackToken }
+    })
+    const slackData = await slackResp.json()
+    // Retorna mensagens em ordem cronológica
+    if (slackData.messages) {
+      slackData.messages = slackData.messages.reverse()
+    }
     return res.status(200).json(slackData)
   }
 
