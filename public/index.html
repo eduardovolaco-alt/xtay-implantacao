@@ -2866,11 +2866,14 @@ function renderDMMessages(userId){
     var avColor=m.fromMe?'var(--ox2)':(activeDMUser?activeDMUser.color:'#4A154B');
     var avInit=m.fromMe?(currentUser?currentUser.initials:'EU'):(activeDMUser?activeDMUser.initials:'?');
     var slackTag=m.source==='slack'?'<span class="dm-slack-tag"><i class="ti ti-brand-slack" style="font-size:8px"></i>Slack</span>':'';
+    var wrapStyle='max-width:70%;min-width:120px;display:flex;flex-direction:column;';
+    var bubbleStyle='padding:9px 13px;border-radius:14px;font-size:11px;line-height:1.6;word-break:break-word;overflow-wrap:anywhere;white-space:normal;';
+    var bubbleColor=m.fromMe?'background:var(--ox2);color:#fff;border-radius:14px 14px 4px 14px;':'background:var(--bg2);border:1px solid var(--bdr);border-radius:14px 14px 14px 4px;color:var(--txt);';
     row.innerHTML=
-      '<div class="dm-msg-av" style="background:'+avColor+'">'+avInit+'</div>'+
-      '<div class="dm-bubble-wrap">'+
-        '<div class="dm-bubble">'+m.text.replace(/\n/g,'<br>')+'</div>'+
-        '<div class="dm-bubble-meta">'+slackTag+time+'</div>'+
+      '<div class="dm-msg-av" style="background:'+avColor+';flex-shrink:0">'+avInit+'</div>'+
+      '<div style="'+wrapStyle+'">'+
+        '<div style="'+bubbleStyle+bubbleColor+'">'+m.text.replace(/\n/g,'<br>')+'</div>'+
+        '<div class="dm-bubble-meta" style="font-size:9px;margin-top:3px;display:flex;align-items:center;gap:4px;">'+slackTag+time+'</div>'+
       '</div>';
     frag.appendChild(row);
   });
