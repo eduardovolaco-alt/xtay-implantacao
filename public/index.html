@@ -603,8 +603,10 @@ body.dark .modal { background: #1A1930; }
 .dm-msgs{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-height:300px}
 .dm-msg{display:flex;gap:9px;align-items:flex-start;width:100%}
 .dm-msg.me{flex-direction:row-reverse}
+.dm-msg>div:last-child{max-width:72%;min-width:60px;display:flex;flex-direction:column}
+.dm-bubble-wrap{max-width:72%;min-width:80px;display:flex;flex-direction:column}
 .dm-msg-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Poppins',sans-serif;font-size:10px;font-weight:700;color:#fff;flex-shrink:0;margin-top:1px}
-.dm-bubble{max-width:72%;padding:9px 13px;border-radius:14px;font-size:11px;line-height:1.65;word-break:break-word;overflow-wrap:break-word;min-width:40px}
+.dm-bubble{max-width:100%;padding:9px 13px;border-radius:14px;font-size:11px;line-height:1.65;word-break:break-word;overflow-wrap:anywhere;white-space:pre-wrap}
 .dm-msg.me .dm-bubble{background:var(--ox2);color:#fff;border-radius:14px 14px 4px 14px;margin-left:auto}
 .dm-msg:not(.me) .dm-bubble{background:var(--bg2);border:1px solid var(--bdr);border-radius:14px 14px 14px 4px;color:var(--txt)}
 .dm-bubble-meta{font-size:9px;margin-top:4px;display:flex;align-items:center;gap:5px}
@@ -2866,7 +2868,7 @@ function renderDMMessages(userId){
     var slackTag=m.source==='slack'?'<span class="dm-slack-tag"><i class="ti ti-brand-slack" style="font-size:8px"></i>Slack</span>':'';
     row.innerHTML=
       '<div class="dm-msg-av" style="background:'+avColor+'">'+avInit+'</div>'+
-      '<div>'+
+      '<div class="dm-bubble-wrap">'+
         '<div class="dm-bubble">'+m.text.replace(/\n/g,'<br>')+'</div>'+
         '<div class="dm-bubble-meta">'+slackTag+time+'</div>'+
       '</div>';

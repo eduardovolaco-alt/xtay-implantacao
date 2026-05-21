@@ -16,6 +16,17 @@ export default async function handler(req, res) {
   try {
     const body = req.body
 
+    // Injeta o Slack token no MCP config se disponível
+    const slackToken = process.env.SLACK_TOKEN
+    if (slackToken && body.mcp_servers) {
+      body.mcp_servers = body.mcp_servers.map(s => {
+        if (s.url && s.url.includes('slack.com')) {
+          return { ...s, authorization_token: slackToken }
+        }
+        return s
+      })
+    }
+
     // Repassa a chamada para a Anthropic, adicionando a key
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
