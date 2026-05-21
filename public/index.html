@@ -788,7 +788,7 @@ body.dark .dm-inp{background:#0F0E1A;color:#E8E8F0;border-color:rgba(255,255,255
         <!-- Dropdown visual -->
         <div id="inv-search-wrap" class="inv-dropdown-wrap">
           <i class="ti ti-search inv-dropdown-icon"></i>
-          <input class="inv-dropdown-inp" id="inv-search-v20" type="text" placeholder="Buscar empreendimento por nome, cidade ou fase..." autocomplete="off" oninput="openInvDropdown(this.value)" onfocus="openInvDropdown(this.value)" onblur="setTimeout(closeInvDropdown,200)">
+          <input class="inv-dropdown-inp" id="inv-search" type="text" placeholder="Buscar empreendimento por nome, cidade ou fase..." autocomplete="off" oninput="openInvDropdown(this.value)" onfocus="openInvDropdown(this.value)" onblur="setTimeout(closeInvDropdown,200)">
           <div class="inv-dropdown-list" id="inv-dropdown-list"></div>
         </div>
         <!-- Hidden select kept for backward compat -->
@@ -947,49 +947,11 @@ body.dark .dm-inp{background:#0F0E1A;color:#E8E8F0;border-color:rgba(255,255,255
 </div>
 
 <!-- Modal novo canal de comunicação -->
-<div id="modal-new-channel" class="modal-bg hidden" onclick="if(event.target===this)hideModal('new-channel')">
-  <div class="modal" onclick="event.stopPropagation()" style="max-width:420px">
-    <div class="modal-title">Novo Canal<button class="ibt" onclick="hideModal('new-channel')"><i class="ti ti-x"></i></button></div>
-    <div class="form-grid" style="grid-template-columns:1fr">
-      <div class="field"><label>Nome do canal *</label><input id="nc-nome" placeholder="ex: Implantação, Revenue, Geral..."></div>
-      <div class="field"><label>Ícone (emoji)</label><input id="nc-icon" placeholder="💬" maxlength="4"></div>
-      <div class="field"><label>Descrição</label><input id="nc-desc" placeholder="Finalidade do canal..."></div>
-      <div class="field"><label>Departamento</label>
-        <select id="nc-dept">
-          <option value="">Geral (todos)</option>
-          <option value="NN">Novos Negócios</option>
-          <option value="JUR">Jurídico</option>
-          <option value="IMP">Implantação</option>
-          <option value="TI">TI</option>
-          <option value="OPS">Operações</option>
-          <option value="REV">Revenue & Mkt</option>
-          <option value="RH">RH</option>
-          <option value="FIN">Financeiro</option>
-        </select>
-      </div>
-    </div>
-    <div class="modal-actions"><button class="btn-dark" onclick="hideModal('new-channel')">Cancelar</button><button class="btn-ox btn" onclick="saveNewChannel()">Criar canal</button></div>
-  </div>
-</div>
+
 
 
 <!-- Modal configuração Slack -->
-<div id="modal-slack-config" class="modal-bg hidden" onclick="if(event.target===this)hideModal('slack-config')">
-  <div class="modal" onclick="event.stopPropagation()" style="max-width:500px">
-    <div class="modal-title"><span style="display:flex;align-items:center;gap:8px"><i class="ti ti-brand-slack" style="color:#4A154B;font-size:18px"></i>Integração Slack</span><button class="ibt" onclick="hideModal('slack-config')"><i class="ti ti-x"></i></button></div>
-    <div style="font-size:11px;color:var(--txt2);margin-bottom:12px;line-height:1.6">Mapeie os canais internos do Assistente Xtay com os canais do seu Slack. Ao enviar uma mensagem, ela será postada automaticamente no canal Slack correspondente.</div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-      <button id="slack-load-btn" onclick="fetchSlackChannels()" class="btn-ox btn" style="font-size:11px;padding:6px 14px;display:flex;align-items:center;gap:5px"><i class="ti ti-brand-slack"></i>Carregar canais do Slack</button>
-      <span id="slack-status" style="font-size:11px;color:var(--txt3)">Clique para buscar canais</span>
-    </div>
-    <div style="font-size:10px;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Mapeamento canal interno → Slack</div>
-    <div id="slack-mapping-rows" style="max-height:300px;overflow-y:auto;border:1.5px solid var(--bdr);border-radius:var(--r);padding:6px 10px">
-      <div style="font-size:11px;color:var(--txt3);padding:8px;text-align:center">Carregue os canais Slack para configurar o mapeamento.</div>
-    </div>
-    <div style="font-size:10px;color:var(--txt3);margin-top:10px;line-height:1.5">💡 Canais sem mapeamento não enviam ao Slack. O mapeamento é salvo no seu navegador.</div>
-    <div class="modal-actions"><button class="btn-dark" onclick="hideModal('slack-config')">Fechar</button></div>
-  </div>
-</div>
+
 <div id="toast" class="toast"></div>
 
 <script>
