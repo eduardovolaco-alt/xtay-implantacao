@@ -2888,9 +2888,10 @@ function getPendingTasksForPerson(person){
       if(empTasks[t.id] === 'done') return; // já feita
       if(personDepts.indexOf(t.dept) === -1) return; // não é dept dela
 
-      // Tarefa está atrasada se a fase do projeto já passou da fase onde deveria ser feita
+      // Tarefa está pendente/atrasada se a fase do projeto já chegou ou passou
+      // da fase onde deveria ser feita (>=) e ainda não foi concluída
       var taskFaseIdx = faseIdx(t.cs);
-      var isLate = taskFaseIdx >= 0 && empFaseIdx > taskFaseIdx;
+      var isLate = taskFaseIdx >= 0 && empFaseIdx >= taskFaseIdx;
 
       if(isLate){
         tasks.push({
@@ -2930,15 +2931,6 @@ function renderTaskSuggestions(person){
     return d;
   })());
   console.log('[DM Tasks] tarefas atrasadas encontradas:', tasks.length, tasks.slice(0,3));
-
-  // Se não há tarefas atrasadas, mostra todas as pendentes do dept
-  if(!tasks.length){
-    tasks = getPendingTasksForPersonAll(person);
-    if(tasks.length){
-      var title = document.querySelector('.dm-tasks-title');
-      if(title) title.innerHTML = '<i class="ti ti-checklist"></i>Tarefas pendentes desta pessoa';
-    }
-  }
 
   if(!tasks.length){ panel.style.display='none'; return; }
 
