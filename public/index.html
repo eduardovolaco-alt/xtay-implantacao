@@ -891,7 +891,7 @@ body.dark .dm-inp{background:#0F0E1A;color:#E8E8F0;border-color:rgba(255,255,255
             </div>
           </div>
           <div class="dm-tasks-panel" id="dm-tasks-panel">
-            <div class="dm-tasks-title"><i class="ti ti-alert-triangle"></i>Tarefas pendentes desta pessoa</div>
+            <div class="dm-tasks-title"><i class="ti ti-alert-triangle"></i>Tarefas atrasadas desta pessoa</div>
             <div class="dm-tasks-list" id="dm-tasks-list"></div>
           </div>
           <div class="dm-msgs" id="dm-msgs">
@@ -2819,48 +2819,64 @@ function filterDMPeople(q){
 }
 
 
-// Busca tarefas pendentes para uma pessoa pelo nome
+// Retorna índice da fase no SORD
+function faseIdx(status){
+  var s=(status||'').toLowerCase().trim();
+  for(var i=0;i<SORD.length;i++){if(SORD[i]===s)return i;}
+  return -1;
+}
+
+// Busca tarefas ATRASADAS para uma pessoa (tarefa deveria estar feita na fase atual)
 function getPendingTasksForPerson(person){
   var tasks = [];
   var personName = person.name.toLowerCase();
+  var firstName = personName.split(' ')[0];
 
-  // Descobre quais depts essa pessoa é responsável (usa db.resps salvo)
+  // Descobre quais depts essa pessoa é responsável
   var resps = db.resps || DRESPS;
   var personDepts = [];
   Object.keys(resps).forEach(function(dk){
-    if(dk.indexOf('_email') !== -1) return; // pula campos de email
+    if(dk.indexOf('_email') !== -1) return;
     var respVal = (resps[dk]||'').toLowerCase();
-    if(respVal.indexOf(personName) !== -1 ||
-       respVal.indexOf(personName.split(' ')[0]) !== -1){
+    if(respVal.indexOf(personName) !== -1 || respVal.indexOf(firstName) !== -1){
       personDepts.push(dk);
     }
   });
+  if(!personDepts.length) return [];
 
-  if(!personDepts.length) return []; // pessoa não é responsável por nenhum dept
-
-  // Busca tarefas pendentes nos projetos ativos
-  var seen = {};
+  // Para cada projeto ativo, verifica tarefas atrasadas
   Object.values(db.emps||{}).forEach(function(emp){
     if(!emp || !emp.nome) return;
+    var empStatus = (emp.cuStatus||emp.status||'').toLowerCase().trim();
+    var empFaseIdx = faseIdx(empStatus);
+    if(empFaseIdx < 0) return; // fase desconhecida
+
     var empTasks = emp.tasks || {};
     TASKS.forEach(function(t){
-      if(empTasks[t.id] === 'done') return;
-      if(personDepts.indexOf(t.dept) === -1) return;
-      var key = t.dept + '_' + t.id;
-      if(seen[key]) return; // evita duplicatas
-      seen[key] = true;
-      tasks.push({
-        empId: emp.id,
-        empNome: emp.nome,
-        taskId: t.id,
-        taskName: t.name,
-        dept: t.dept,
-        deptName: DEPTS[t.dept] || t.dept
-      });
+      if(empTasks[t.id] === 'done') return; // já feita
+      if(personDepts.indexOf(t.dept) === -1) return; // não é dept dela
+
+      // Tarefa está atrasada se a fase do projeto já passou da fase onde deveria ser feita
+      var taskFaseIdx = faseIdx(t.cs);
+      var isLate = taskFaseIdx >= 0 && empFaseIdx > taskFaseIdx;
+
+      if(isLate){
+        tasks.push({
+          empId: emp.id,
+          empNome: emp.nome,
+          taskId: t.id,
+          taskName: t.name,
+          dept: t.dept,
+          deptName: DEPTS[t.dept] || t.dept,
+          faseAtraso: SORD[taskFaseIdx] + ' → ' + empStatus
+        });
+      }
     });
   });
 
-  return tasks.slice(0, 6);
+  // Ordena por projeto e limita a 8
+  tasks.sort(function(a,b){return a.empNome.localeCompare(b.empNome,'pt');});
+  return tasks.slice(0, 8);
 }
 
 function renderTaskSuggestions(person){
@@ -2876,9 +2892,10 @@ function renderTaskSuggestions(person){
     var btn = document.createElement('button');
     btn.className = 'dm-task-btn';
     btn.innerHTML =
-      '<i class="ti ti-checklist"></i>'+
-      '<span style="flex:1">'+t.empNome.slice(0,20)+' · '+t.taskName.slice(0,45)+'</span>'+
+      '<i class="ti ti-alert-triangle" style="color:#e55;"></i>'+
+      '<span style="flex:1"><strong>'+t.empNome.slice(0,18)+'</strong> · '+t.taskName.slice(0,38)+'</span>'+
       '<span class="dm-task-dept">'+t.deptName+'</span>';
+    btn.title = 'Atrasada: deveria ter sido feita em "'+t.faseAtraso+'"';
     btn.addEventListener('click', function(){
       var inp = document.getElementById('dm-inp');
       if(inp){
