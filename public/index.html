@@ -631,14 +631,11 @@ body.dark .modal { background: #1A1930; }
 body.dark .dm-main{background:#0F0E1A}
 body.dark .dm-msg:not(.me) .dm-bubble{background:#1A1930;border-color:rgba(255,255,255,.08)}
 body.dark .dm-inp{background:#0F0E1A;color:#E8E8F0;border-color:rgba(255,255,255,.15)}
-/* Task suggestions in DM */
-.dm-tasks-panel{padding:8px 14px;background:rgba(243,112,58,.06);border-bottom:0.5px solid rgba(243,112,58,.2);display:none}
-.dm-tasks-title{font-size:10px;font-weight:600;color:var(--ox);margin-bottom:6px;display:flex;align-items:center;gap:5px}
-.dm-tasks-list{display:flex;flex-direction:column;gap:4px;max-height:120px;overflow-y:auto}
-.dm-task-btn{font-size:10px;padding:5px 10px;border-radius:7px;border:0.5px solid rgba(243,112,58,.3);background:rgba(243,112,58,.08);color:var(--txt);cursor:pointer;text-align:left;display:flex;align-items:center;gap:6px;transition:background .1s}
-.dm-task-btn:hover{background:rgba(243,112,58,.18);border-color:var(--ox)}
-.dm-task-btn i{color:var(--ox);font-size:11px;flex-shrink:0}
-.dm-task-dept{font-size:8px;font-weight:600;color:var(--ox);background:rgba(243,112,58,.12);border-radius:4px;padding:1px 5px;flex-shrink:0}
+/* Quick action buttons in DM */
+.dm-quick-btns{padding:8px 14px;border-bottom:0.5px solid var(--bdr);display:none;gap:6px;flex-wrap:wrap}
+.dm-qbtn{font-size:10px;padding:4px 10px;border-radius:7px;border:0.5px solid var(--bdr2);background:var(--bg);color:var(--txt);cursor:pointer;display:flex;align-items:center;gap:4px;transition:background .1s;font-family:'Public Sans',sans-serif}
+.dm-qbtn:hover{background:var(--oxl);border-color:var(--ox);color:var(--ox)}
+.dm-qbtn.active{background:var(--oxl);border-color:var(--ox);color:var(--ox)}
 
 </style>
 </head>
@@ -890,9 +887,11 @@ body.dark .dm-inp{background:#0F0E1A;color:#E8E8F0;border-color:rgba(255,255,255
               <button class="dm-refresh-btn" id="dm-refresh-btn" onclick="openSlackDM()" style="display:none"><i class="ti ti-external-link"></i>Abrir no Slack</button>
             </div>
           </div>
-          <div class="dm-tasks-panel" id="dm-tasks-panel">
-            <div class="dm-tasks-title"><i class="ti ti-alert-triangle"></i>Tarefas atrasadas desta pessoa</div>
-            <div class="dm-tasks-list" id="dm-tasks-list"></div>
+          <div class="dm-quick-btns" id="dm-quick-btns">
+            <button class="dm-qbtn" onclick="dmQuick('tarefa')"><i class="ti ti-checklist"></i>Tarefa pendente</button>
+            <button class="dm-qbtn" onclick="dmQuick('aviso')"><i class="ti ti-alert-triangle"></i>Aviso</button>
+            <button class="dm-qbtn" onclick="dmQuick('concluido')"><i class="ti ti-circle-check"></i>Concluído</button>
+            <button class="dm-qbtn" onclick="dmQuick('reuniao')"><i class="ti ti-calendar"></i>Reunião</button>
           </div>
           <div class="dm-msgs" id="dm-msgs">
             <div class="dm-empty-state">
@@ -2819,150 +2818,35 @@ function filterDMPeople(q){
 }
 
 
-// Fallback: todas as tarefas pendentes (sem filtro de atraso)
-function getPendingTasksForPersonAll(person){
-  var tasks = [];
-  var personName = person.name.toLowerCase();
-  var firstName = personName.split(' ')[0];
-  var resps = db.resps || DRESPS;
-  var personDepts = [];
-  Object.keys(resps).forEach(function(dk){
-    if(dk.indexOf('_email') !== -1) return;
-    var respVal = (resps[dk]||'').toLowerCase();
-    if(respVal.indexOf(personName) !== -1 || respVal.indexOf(firstName) !== -1){
-      personDepts.push(dk);
-    }
-  });
-  if(!personDepts.length) return [];
-  var seen = {};
-  Object.values(db.emps||{}).forEach(function(emp){
-    if(!emp||!emp.nome) return;
-    var empTasks = emp.tasks || {};
-    TASKS.forEach(function(t){
-      if(empTasks[t.id] === 'done') return;
-      if(personDepts.indexOf(t.dept) === -1) return;
-      var key = emp.id+'_'+t.id;
-      if(seen[key]) return;
-      seen[key] = true;
-      tasks.push({empId:emp.id,empNome:emp.nome,taskId:t.id,taskName:t.name,dept:t.dept,deptName:DEPTS[t.dept]||t.dept,faseAtraso:''});
-    });
-  });
-  tasks.sort(function(a,b){return a.empNome.localeCompare(b.empNome,'pt');});
-  return tasks.slice(0,8);
-}
 
-// Retorna índice da fase no SORD
-function faseIdx(status){
-  var s=(status||'').toLowerCase().trim();
-  for(var i=0;i<SORD.length;i++){if(SORD[i]===s)return i;}
-  return -1;
-}
-
-// Busca tarefas ATRASADAS para uma pessoa (tarefa deveria estar feita na fase atual)
-function getPendingTasksForPerson(person){
-  var tasks = [];
-  var personName = person.name.toLowerCase();
-  var firstName = personName.split(' ')[0];
-
-  // Descobre quais depts essa pessoa é responsável
-  var resps = db.resps || DRESPS;
-  var personDepts = [];
-  Object.keys(resps).forEach(function(dk){
-    if(dk.indexOf('_email') !== -1) return;
-    var respVal = (resps[dk]||'').toLowerCase();
-    if(respVal.indexOf(personName) !== -1 || respVal.indexOf(firstName) !== -1){
-      personDepts.push(dk);
-    }
-  });
-  if(!personDepts.length) return [];
-
-  // Para cada projeto ativo, verifica tarefas atrasadas
-  Object.values(db.emps||{}).forEach(function(emp){
-    if(!emp || !emp.nome) return;
-    var empStatus = (emp.cuStatus||emp.status||'').toLowerCase().trim();
-    var empFaseIdx = faseIdx(empStatus);
-    // Se fase desconhecida ou não mapeada, tenta mapear via SMAP
-    if(empFaseIdx < 0){
-      // tenta encontrar substring
-      for(var si=0;si<SORD.length;si++){
-        if(empStatus.indexOf(SORD[si])!==-1||SORD[si].indexOf(empStatus)!==-1){
-          empFaseIdx=si; break;
-        }
-      }
-    }
-    if(empFaseIdx < 0) empFaseIdx = 0; // fallback: fase inicial
-
-    var empTasks = emp.tasks || {};
-    TASKS.forEach(function(t){
-      if(empTasks[t.id] === 'done') return; // já feita
-      if(personDepts.indexOf(t.dept) === -1) return; // não é dept dela
-
-      // Tarefa está pendente/atrasada se a fase do projeto já chegou ou passou
-      var taskFaseIdx = faseIdx(t.cs);
-      if(taskFaseIdx < 0) taskFaseIdx = 0; // fallback
-      var isLate = empFaseIdx >= taskFaseIdx;
-
-      if(isLate){
-        tasks.push({
-          empId: emp.id,
-          empNome: emp.nome,
-          taskId: t.id,
-          taskName: t.name,
-          dept: t.dept,
-          deptName: DEPTS[t.dept] || t.dept,
-          faseAtraso: SORD[taskFaseIdx] + ' → ' + empStatus
-        });
-      }
-    });
-  });
-
-  // Ordena por projeto e limita a 8
-  tasks.sort(function(a,b){return a.empNome.localeCompare(b.empNome,'pt');});
-  return tasks.slice(0, 8);
+// Quick action buttons
+function dmQuick(type){
+  var inp = document.getElementById('dm-inp');
+  if(!inp || !activeDMUser) return;
+  var name = activeDMUser.name.split(' ')[0];
+  var prefix = {
+    'tarefa':   'Olá '+name+', lembrete: a tarefa "___" do projeto ___ está pendente. Pode verificar?',
+    'aviso':    '[AVISO] '+name+', ',
+    'concluido':'[CONCLUÍDO] '+name+', ',
+    'reuniao':  'Olá '+name+', podemos agendar uma reunião sobre ___? Qual sua disponibilidade?'
+  }[type] || '';
+  inp.value = prefix;
+  inp.focus();
+  // Move cursor to first ___
+  var pos = prefix.indexOf('___');
+  if(pos !== -1){
+    inp.setSelectionRange(pos, pos+3);
+  }
+  // Highlight active button
+  document.querySelectorAll('.dm-qbtn').forEach(function(b){ b.classList.remove('active'); });
+  event.target.closest('.dm-qbtn').classList.add('active');
 }
 
 function renderTaskSuggestions(person){
-  var panel = document.getElementById('dm-tasks-panel');
-  var list  = document.getElementById('dm-tasks-list');
-  if(!panel || !list) return;
-
-  var tasks = getPendingTasksForPerson(person);
-
-  // Debug: mostra no console o que foi encontrado
-  console.log('[DM Tasks] pessoa:', person.name);
-  console.log('[DM Tasks] depts encontrados:', (function(){
-    var resps=db.resps||DRESPS, pn=person.name.toLowerCase(), fn=pn.split(' ')[0], d=[];
-    Object.keys(resps).forEach(function(dk){
-      if(dk.indexOf('_email')!==-1)return;
-      var rv=(resps[dk]||'').toLowerCase();
-      if(rv.indexOf(pn)!==-1||rv.indexOf(fn)!==-1)d.push(dk+'='+resps[dk]);
-    });
-    return d;
-  })());
-  console.log('[DM Tasks] tarefas atrasadas encontradas:', tasks.length, tasks.slice(0,3));
-
-  if(!tasks.length){ panel.style.display='none'; return; }
-
-  list.innerHTML = '';
-  tasks.forEach(function(t){
-    var btn = document.createElement('button');
-    btn.className = 'dm-task-btn';
-    btn.innerHTML =
-      '<i class="ti ti-alert-triangle" style="color:#e55;"></i>'+
-      '<span style="flex:1"><strong>'+t.empNome.slice(0,18)+'</strong> · '+t.taskName.slice(0,38)+'</span>'+
-      '<span class="dm-task-dept">'+t.deptName+'</span>';
-    btn.title = 'Atrasada: deveria ter sido feita em "'+t.faseAtraso+'"';
-    btn.addEventListener('click', function(){
-      var inp = document.getElementById('dm-inp');
-      if(inp){
-        inp.value = 'Olá '+person.name.split(' ')[0]+', lembrete: a tarefa "'+t.taskName+'" do projeto '+t.empNome+' ainda está pendente. Pode verificar?';
-        inp.focus();
-      }
-    });
-    list.appendChild(btn);
-  });
-  panel.style.display = 'block';
+  var panel = document.getElementById('dm-quick-btns');
+  if(panel) panel.style.display = 'flex';
 }
+
 
 async function openDMWith(userId){
   var person=dmPeople.find(function(p){return p.id===userId;});
