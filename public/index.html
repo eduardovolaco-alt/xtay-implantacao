@@ -601,11 +601,11 @@ body.dark .modal { background: #1A1930; }
 .dm-refresh-btn:hover{background:rgba(255,255,255,.18)}
 .dm-slack-badge{background:#4A154B;color:#fff;font-size:9px;font-weight:600;border-radius:99px;padding:2px 7px;display:flex;align-items:center;gap:3px}
 .dm-msgs{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-height:300px}
-.dm-msg{display:flex;gap:9px;align-items:flex-start}
+.dm-msg{display:flex;gap:9px;align-items:flex-start;width:100%}
 .dm-msg.me{flex-direction:row-reverse}
 .dm-msg-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Poppins',sans-serif;font-size:10px;font-weight:700;color:#fff;flex-shrink:0;margin-top:1px}
-.dm-bubble{max-width:75%;padding:9px 13px;border-radius:14px;font-size:11px;line-height:1.65;word-break:break-word}
-.dm-msg.me .dm-bubble{background:var(--ox2);color:#fff;border-radius:14px 14px 4px 14px}
+.dm-bubble{max-width:72%;padding:9px 13px;border-radius:14px;font-size:11px;line-height:1.65;word-break:break-word;overflow-wrap:break-word;min-width:40px}
+.dm-msg.me .dm-bubble{background:var(--ox2);color:#fff;border-radius:14px 14px 4px 14px;margin-left:auto}
 .dm-msg:not(.me) .dm-bubble{background:var(--bg2);border:1px solid var(--bdr);border-radius:14px 14px 14px 4px;color:var(--txt)}
 .dm-bubble-meta{font-size:9px;margin-top:4px;display:flex;align-items:center;gap:5px}
 .dm-msg.me .dm-bubble-meta{justify-content:flex-end;color:rgba(255,255,255,.45)}
@@ -2885,29 +2885,40 @@ async function dmSend(){
   if(!text) return;
   inp.value='';
 
-  // Salva mensagem localmente
+  // Mostra mensagem imediatamente (otimista)
   var lm={id:'local_'+Date.now(),ts:Date.now(),text:text,fromMe:true,user:currentUser.name,source:'local'};
   if(!dmMessages[activeDMUser.id]) dmMessages[activeDMUser.id]=[];
   dmMessages[activeDMUser.id].push(lm);
   renderDMMessages(activeDMUser.id);
   addHist('[DM/'+activeDMUser.name+'] '+text.slice(0,50),'manual');
 
-  // Abre Slack na DM com a pessoa (via email) + copia mensagem
-  var slackUrl = 'https://app.slack.com/client';
-  var emailLink = 'https://slack.com/app_redirect?channel='+encodeURIComponent(activeDMUser.email);
+  var btn=document.getElementById('dm-send-btn');
+  if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader"></i>';}
 
-  // Copia o texto para a área de transferência
   try{
-    await navigator.clipboard.writeText(text);
-    showToast('Mensagem copiada! Abrindo Slack...','ok');
+    var resp=await fetch('/api/claude',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:300,
+        system:'Você é um agente Slack. Use slack_search_users para encontrar o usuário pelo email '+activeDMUser.email+' e depois envie uma mensagem direta (DM) para esse usuário. Confirme brevemente quando enviado.',
+        messages:[{role:'user',content:'Envie DM no Slack para '+activeDMUser.email+' ('+activeDMUser.name+'):\n\n'+text}],
+        mcp_servers:[{type:'url',url:'https://mcp.slack.com/mcp',name:'slack'}]
+      })
+    });
+    if(resp.ok){
+      lm.source='slack';
+      renderDMMessages(activeDMUser.id);
+      showToast('✓ Enviado para '+activeDMUser.name+' no Slack','ok');
+    } else {
+      showToast('Erro ao enviar no Slack','wn');
+    }
   }catch(e){
-    showToast('Abrindo Slack para '+activeDMUser.name,'ok');
+    showToast('Erro de conexão','wn');
+    console.error('dmSend:',e);
   }
-
-  // Abre a DM no Slack
-  setTimeout(function(){
-    window.open('https://app.slack.com/client', '_blank');
-  }, 500);
+  if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-brand-slack"></i>Enviar';}
 }
 
 function dmKeyDown(ev){
