@@ -631,6 +631,14 @@ body.dark .modal { background: #1A1930; }
 body.dark .dm-main{background:#0F0E1A}
 body.dark .dm-msg:not(.me) .dm-bubble{background:#1A1930;border-color:rgba(255,255,255,.08)}
 body.dark .dm-inp{background:#0F0E1A;color:#E8E8F0;border-color:rgba(255,255,255,.15)}
+/* Task suggestions in DM */
+.dm-tasks-panel{padding:8px 14px;background:rgba(243,112,58,.06);border-bottom:0.5px solid rgba(243,112,58,.2);display:none}
+.dm-tasks-title{font-size:10px;font-weight:600;color:var(--ox);margin-bottom:6px;display:flex;align-items:center;gap:5px}
+.dm-tasks-list{display:flex;flex-direction:column;gap:4px;max-height:120px;overflow-y:auto}
+.dm-task-btn{font-size:10px;padding:5px 10px;border-radius:7px;border:0.5px solid rgba(243,112,58,.3);background:rgba(243,112,58,.08);color:var(--txt);cursor:pointer;text-align:left;display:flex;align-items:center;gap:6px;transition:background .1s}
+.dm-task-btn:hover{background:rgba(243,112,58,.18);border-color:var(--ox)}
+.dm-task-btn i{color:var(--ox);font-size:11px;flex-shrink:0}
+.dm-task-dept{font-size:8px;font-weight:600;color:var(--ox);background:rgba(243,112,58,.12);border-radius:4px;padding:1px 5px;flex-shrink:0}
 
 </style>
 </head>
@@ -881,6 +889,10 @@ body.dark .dm-inp{background:#0F0E1A;color:#E8E8F0;border-color:rgba(255,255,255
               <span class="dm-slack-badge" id="dm-slack-badge" style="display:none"><i class="ti ti-brand-slack" style="font-size:10px"></i>Slack</span>
               <button class="dm-refresh-btn" id="dm-refresh-btn" onclick="openSlackDM()" style="display:none"><i class="ti ti-external-link"></i>Abrir no Slack</button>
             </div>
+          </div>
+          <div class="dm-tasks-panel" id="dm-tasks-panel">
+            <div class="dm-tasks-title"><i class="ti ti-alert-triangle"></i>Tarefas pendentes desta pessoa</div>
+            <div class="dm-tasks-list" id="dm-tasks-list"></div>
           </div>
           <div class="dm-msgs" id="dm-msgs">
             <div class="dm-empty-state">
@@ -2806,6 +2818,79 @@ function filterDMPeople(q){
   renderDMPeople();
 }
 
+
+// Busca tarefas pendentes para uma pessoa pelo nome
+function getPendingTasksForPerson(person){
+  var tasks = [];
+  var personName = person.name.toLowerCase();
+
+  // Descobre quais depts essa pessoa é responsável (usa db.resps salvo)
+  var resps = db.resps || DRESPS;
+  var personDepts = [];
+  Object.keys(resps).forEach(function(dk){
+    if(dk.indexOf('_email') !== -1) return; // pula campos de email
+    var respVal = (resps[dk]||'').toLowerCase();
+    if(respVal.indexOf(personName) !== -1 ||
+       respVal.indexOf(personName.split(' ')[0]) !== -1){
+      personDepts.push(dk);
+    }
+  });
+
+  if(!personDepts.length) return []; // pessoa não é responsável por nenhum dept
+
+  // Busca tarefas pendentes nos projetos ativos
+  var seen = {};
+  Object.values(db.emps||{}).forEach(function(emp){
+    if(!emp || !emp.nome) return;
+    var empTasks = emp.tasks || {};
+    TASKS.forEach(function(t){
+      if(empTasks[t.id] === 'done') return;
+      if(personDepts.indexOf(t.dept) === -1) return;
+      var key = t.dept + '_' + t.id;
+      if(seen[key]) return; // evita duplicatas
+      seen[key] = true;
+      tasks.push({
+        empId: emp.id,
+        empNome: emp.nome,
+        taskId: t.id,
+        taskName: t.name,
+        dept: t.dept,
+        deptName: DEPTS[t.dept] || t.dept
+      });
+    });
+  });
+
+  return tasks.slice(0, 6);
+}
+
+function renderTaskSuggestions(person){
+  var panel = document.getElementById('dm-tasks-panel');
+  var list  = document.getElementById('dm-tasks-list');
+  if(!panel || !list) return;
+
+  var tasks = getPendingTasksForPerson(person);
+  if(!tasks.length){ panel.style.display='none'; return; }
+
+  list.innerHTML = '';
+  tasks.forEach(function(t){
+    var btn = document.createElement('button');
+    btn.className = 'dm-task-btn';
+    btn.innerHTML =
+      '<i class="ti ti-checklist"></i>'+
+      '<span style="flex:1">'+t.empNome.slice(0,20)+' · '+t.taskName.slice(0,45)+'</span>'+
+      '<span class="dm-task-dept">'+t.deptName+'</span>';
+    btn.addEventListener('click', function(){
+      var inp = document.getElementById('dm-inp');
+      if(inp){
+        inp.value = 'Olá '+person.name.split(' ')[0]+', lembrete: a tarefa "'+t.taskName+'" do projeto '+t.empNome+' ainda está pendente. Pode verificar?';
+        inp.focus();
+      }
+    });
+    list.appendChild(btn);
+  });
+  panel.style.display = 'block';
+}
+
 async function openDMWith(userId){
   var person=dmPeople.find(function(p){return p.id===userId;});
   if(!person) return;
@@ -2823,6 +2908,7 @@ async function openDMWith(userId){
   if(rBtn) rBtn.style.display='flex';
   renderDMPeople();
   renderDMMessages(userId);
+  renderTaskSuggestions(person);
   await fetchDMHistory(userId);
   startDMPolling(userId);
 }
