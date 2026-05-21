@@ -2902,29 +2902,28 @@ async function dmSend(){
   if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader"></i>';}
 
   try{
-    // Canal #xtay-assistente — mensagem com @menção à pessoa
+    // Usa Slack Web API direta via proxy — sem MCP
     var slackUserId = activeDMUser.slackId || '';
-    var mention = slackUserId ? '<@'+slackUserId+'>' : activeDMUser.name;
-    var channelId = 'C0B5BJ3BC9Y'; // #xtay-assistente
+    var mention = slackUserId ? '<@'+slackUserId+'>' : '*'+activeDMUser.name+'*';
     var senderName = currentUser ? currentUser.name : 'Usuário';
-    var msgPayload = '*[Xtay Assistente]* '+mention+' — mensagem de *'+senderName+'*:\n'+text;
+    var msgText = '*[Xtay Assistente]* '+mention+' — mensagem de *'+senderName+'*:\n'+text;
     var resp=await fetch('/api/claude',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:200,
-        system:'Você é um agente Slack. Use slack_send_message com channel_id='+channelId+' para enviar a mensagem fornecida. Apenas envie, não adicione texto extra.',
-        messages:[{role:'user',content:'Envie no canal Slack ID '+channelId+' esta mensagem exata:\n\n'+msgPayload}],
-        mcp_servers:[{type:'url',url:'https://mcp.slack.com/mcp',name:'slack'}]
+        _slack_direct: true,
+        channel: 'C0B5BJ3BC9Y',
+        text: msgText
       })
     });
-    if(resp.ok){
+    var data = await resp.json();
+    if(data.ok){
       lm.source='slack';
       renderDMMessages(activeDMUser.id);
-      showToast('✓ Enviado para @'+activeDMUser.name+' no Slack','ok');
+      showToast('✓ Enviado para '+activeDMUser.name+' no Slack','ok');
     } else {
-      showToast('Erro ao enviar no Slack','wn');
+      showToast('Erro Slack: '+(data.error||'desconhecido'),'wn');
+      console.warn('Slack error:',data);
     }
   }catch(e){
     showToast('Erro de conexão','wn');
