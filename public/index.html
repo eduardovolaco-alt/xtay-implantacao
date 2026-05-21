@@ -2881,7 +2881,16 @@ function getPendingTasksForPerson(person){
     if(!emp || !emp.nome) return;
     var empStatus = (emp.cuStatus||emp.status||'').toLowerCase().trim();
     var empFaseIdx = faseIdx(empStatus);
-    if(empFaseIdx < 0) return; // fase desconhecida
+    // Se fase desconhecida ou não mapeada, tenta mapear via SMAP
+    if(empFaseIdx < 0){
+      // tenta encontrar substring
+      for(var si=0;si<SORD.length;si++){
+        if(empStatus.indexOf(SORD[si])!==-1||SORD[si].indexOf(empStatus)!==-1){
+          empFaseIdx=si; break;
+        }
+      }
+    }
+    if(empFaseIdx < 0) empFaseIdx = 0; // fallback: fase inicial
 
     var empTasks = emp.tasks || {};
     TASKS.forEach(function(t){
@@ -2889,9 +2898,9 @@ function getPendingTasksForPerson(person){
       if(personDepts.indexOf(t.dept) === -1) return; // não é dept dela
 
       // Tarefa está pendente/atrasada se a fase do projeto já chegou ou passou
-      // da fase onde deveria ser feita (>=) e ainda não foi concluída
       var taskFaseIdx = faseIdx(t.cs);
-      var isLate = taskFaseIdx >= 0 && empFaseIdx >= taskFaseIdx;
+      if(taskFaseIdx < 0) taskFaseIdx = 0; // fallback
+      var isLate = empFaseIdx >= taskFaseIdx;
 
       if(isLate){
         tasks.push({
