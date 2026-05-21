@@ -2902,28 +2902,27 @@ async function dmSend(){
   if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader"></i>';}
 
   try{
-    var slackId = activeDMUser.slackId || '';
-    var sysprompt = slackId
-      ? 'Você é um agente Slack. Envie DM ao usuário ID '+slackId+' usando slack_send_message com channel_id='+slackId+'. Confirme quando enviado.'
-      : 'Você é um agente Slack. Use slack_search_users para encontrar o usuário pelo email '+activeDMUser.email+' e envie uma DM. Confirme quando enviado.';
-    var usermsg = slackId
-      ? 'Envie DM Slack ao ID '+slackId+' ('+activeDMUser.name+'): '+text
-      : 'Envie DM Slack para '+activeDMUser.email+' ('+activeDMUser.name+'): '+text;
+    // Canal #xtay-assistente — mensagem com @menção à pessoa
+    var slackUserId = activeDMUser.slackId || '';
+    var mention = slackUserId ? '<@'+slackUserId+'>' : activeDMUser.name;
+    var channelId = 'C0B5BJ3BC9Y'; // #xtay-assistente
+    var senderName = currentUser ? currentUser.name : 'Usuário';
+    var msgPayload = '*[Xtay Assistente]* '+mention+' — mensagem de *'+senderName+'*:\n'+text;
     var resp=await fetch('/api/claude',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         model:'claude-sonnet-4-20250514',
-        max_tokens:300,
-        system:sysprompt,
-        messages:[{role:'user',content:usermsg}],
+        max_tokens:200,
+        system:'Você é um agente Slack. Use slack_send_message com channel_id='+channelId+' para enviar a mensagem fornecida. Apenas envie, não adicione texto extra.',
+        messages:[{role:'user',content:'Envie no canal Slack ID '+channelId+' esta mensagem exata:\n\n'+msgPayload}],
         mcp_servers:[{type:'url',url:'https://mcp.slack.com/mcp',name:'slack'}]
       })
     });
     if(resp.ok){
       lm.source='slack';
       renderDMMessages(activeDMUser.id);
-      showToast('✓ Enviado para '+activeDMUser.name+' no Slack','ok');
+      showToast('✓ Enviado para @'+activeDMUser.name+' no Slack','ok');
     } else {
       showToast('Erro ao enviar no Slack','wn');
     }
