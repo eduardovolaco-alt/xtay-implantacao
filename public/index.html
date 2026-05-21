@@ -638,7 +638,7 @@ body.dark .dm-inp{background:#0F0E1A;color:#E8E8F0;border-color:rgba(255,255,255
     <div class="logo-sq">x</div>
     <div><div class="logo-txt">xtay <span style="color:rgba(255,255,255,.4);font-weight:400;font-size:11px">/ implantação</span></div><div class="logo-sub" id="hsx">Carregando...</div></div>
     <div class="hdr-sep"></div>
-    <div><div class="hdr-info">Assistente de Implantação</div><div class="hdr-sub2">v20 · Operação Xtay</div></div>
+    <div><div class="hdr-info">Assistente de Implantação</div><div class="hdr-sub2">v22 · Operação Xtay <span id="supa-status" style="font-size:9px;color:rgba(255,255,255,.35)">⟳ sincronizando...</span></div></div>
     <div class="hact">
       <div class="search-wrap">
         <i class="ti ti-search search-icon"></i>
@@ -954,6 +954,137 @@ body.dark .dm-inp{background:#0F0E1A;color:#E8E8F0;border-color:rgba(255,255,255
 
 <div id="toast" class="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+// ── SUPABASE CONFIG ──────────────────────────────────────────
+var SUPA_URL = 'https://xckzkejzvbcbxjmckiuu.supabase.co';
+var SUPA_KEY = 'sb_publishable_8WOjcPfbWGk6FvyDBILlYQ_5IDj8skx';
+var supa = window.supabase ? window.supabase.createClient(SUPA_URL, SUPA_KEY, {
+  realtime: { params: { eventsPerSecond: 10 } }
+}) : null;
+
+// ── SUPABASE SYNC ─────────────────────────────────────────────
+// Sincroniza dados do localStorage com o Supabase em tempo real
+
+async function supaSync() {
+  if (!supa) return;
+  try {
+    // Carrega projetos do Supabase
+    var { data: projetos } = await supa.from('projetos').select('*');
+    if (projetos && projetos.length) {
+      projetos.forEach(function(p) {
+        if (!db.emps[p.id]) db.emps[p.id] = {};
+        var e = db.emps[p.id];
+        e.id = p.id; e.nome = p.nome; e.cuStatus = p.cu_status || e.cuStatus;
+        e.data = p.data_inaug || e.data; e.startDate = p.start_date || e.startDate;
+        e.resp = p.responsavel || e.resp; e.foto = p.foto_url || e.foto;
+        e.padrao = p.padrao || e.padrao;
+      });
+    }
+
+    // Carrega tarefas do Supabase
+    var { data: tarefas } = await supa.from('tarefas').select('*');
+    if (tarefas && tarefas.length) {
+      tarefas.forEach(function(t) {
+        if (db.emps[t.projeto_id]) {
+          if (!db.emps[t.projeto_id].tasks) db.emps[t.projeto_id].tasks = {};
+          db.emps[t.projeto_id].tasks[t.task_id] = t.status;
+        }
+      });
+    }
+
+    // Carrega histórico do Supabase
+    var { data: hist } = await supa.from('historico').select('*').order('created_at', { ascending: false }).limit(50);
+    if (hist && hist.length) {
+      var supaHist = hist.map(function(h) {
+        return { msg: h.mensagem, ts: h.created_at, tipo: h.tipo, user: h.usuario };
+      });
+      // Merge com histórico local
+      db.hist = supaHist;
+    }
+
+    saveDB();
+    renderAll();
+    showToast('✓ Sincronizado com a nuvem', 'ok');
+    var si=document.getElementById('supa-status');
+    if(si){si.textContent='● nuvem ativa';si.style.color='rgba(43,172,118,.8)';}
+  } catch(e) {
+    console.warn('supaSync error:', e);
+  }
+}
+
+// Salva um projeto no Supabase
+async function supaSaveProjeto(emp) {
+  if (!supa || !emp || !emp.id) return;
+  try {
+    await supa.from('projetos').upsert({
+      id: emp.id, nome: emp.nome, status: emp.cuStatus,
+      cu_status: emp.cuStatus, data_inaug: emp.data || null,
+      start_date: emp.startDate || null, responsavel: emp.resp,
+      foto_url: emp.foto || null, padrao: emp.padrao || 'COMFORT',
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'id' });
+  } catch(e) { console.warn('supaSaveProjeto:', e); }
+}
+
+// Salva uma tarefa no Supabase
+async function supaSaveTarefa(projetoId, taskId, status) {
+  if (!supa) return;
+  try {
+    var user = '';
+    try { user = JSON.parse(localStorage.getItem('xtay_user') || '{}').name || ''; } catch(e) {}
+    await supa.from('tarefas').upsert({
+      projeto_id: projetoId, task_id: taskId, status: status,
+      updated_by: user, updated_at: new Date().toISOString()
+    }, { onConflict: 'projeto_id,task_id' });
+  } catch(e) { console.warn('supaSaveTarefa:', e); }
+}
+
+// Salva histórico no Supabase
+async function supaAddHist(msg, tipo) {
+  if (!supa) return;
+  try {
+    var user = '';
+    try { user = JSON.parse(localStorage.getItem('xtay_user') || '{}').name || ''; } catch(e) {}
+    await supa.from('historico').insert({ mensagem: msg, tipo: tipo || 'manual', usuario: user });
+  } catch(e) { console.warn('supaAddHist:', e); }
+}
+
+// Realtime — escuta mudanças de outros usuários
+function supaStartRealtime() {
+  if (!supa) return;
+  supa.channel('xtay-realtime')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'projetos' }, function(payload) {
+      var p = payload.new;
+      if (p && p.id && db.emps[p.id]) {
+        db.emps[p.id].cuStatus = p.cu_status || db.emps[p.id].cuStatus;
+        db.emps[p.id].data = p.data_inaug || db.emps[p.id].data;
+        db.emps[p.id].resp = p.responsavel || db.emps[p.id].resp;
+        saveDB(); renderAll();
+      }
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'tarefas' }, function(payload) {
+      var t = payload.new;
+      if (t && t.projeto_id && db.emps[t.projeto_id]) {
+        if (!db.emps[t.projeto_id].tasks) db.emps[t.projeto_id].tasks = {};
+        db.emps[t.projeto_id].tasks[t.task_id] = t.status;
+        saveDB();
+        if (typeof renderDetalhe === 'function') try { renderDetalhe(); } catch(e) {}
+      }
+    })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'historico' }, function(payload) {
+      var h = payload.new;
+      if (h) {
+        db.hist.unshift({ msg: h.mensagem, ts: h.created_at, tipo: h.tipo, user: h.usuario });
+        if (db.hist.length > 100) db.hist = db.hist.slice(0, 100);
+        saveDB();
+        if (typeof renderHist === 'function') try { renderHist(); } catch(e) {}
+      }
+    })
+    .subscribe();
+  console.log('Supabase realtime ativo');
+}
+</script>
 <script>
 var SK='xtay_v20';
 var CU_LIST='901713611629';
@@ -1356,7 +1487,8 @@ async function onDrop(ev,targetSt){if(!dragEmpId)return;
   var e=db.emps[empId];if(!e)return;
   var old=e.cuStatus;e.cuStatus=targetSt;e.tasks=inferTasks(targetSt);
   addHist('['+e.nome.slice(0,20)+'] '+SLBL[old]+' → '+SLBL[targetSt]);
-  saveDB();renderAll();showToast('Movendo "'+e.nome.split('-')[0].trim()+'" → '+SLBL[targetSt]+'...');
+  saveDB();renderAll();
+  try{supaSaveProjeto(e);}catch(ex){}showToast('Movendo "'+e.nome.split('-')[0].trim()+'" → '+SLBL[targetSt]+'...');
   try{await fetch('/api/claude',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,mcp_servers:[{type:'url',url:'https://mcp.clickup.com/mcp',name:'clickup'}],system:'ClickUp status updater.',messages:[{role:'user',content:'Update task '+e.cuId+' status to "'+targetSt+'" using clickup_update_task.'}]})});e.lastSync=new Date().toISOString();saveDB();showToast('✓ '+e.nome.split('-')[0].trim()+' → '+SLBL[targetSt]+' · ClickUp atualizado','ok');}catch(err){showToast('✓ Atualizado localmente · Erro no ClickUp','er');}
 }
 function filterKanban(empId,btn){kanbanFilter=empId;document.querySelectorAll('#kanban-fb .fb').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');renderKanban();}
@@ -1465,6 +1597,7 @@ async function toggleTask(empId,taskId){
   var t=TASKS.find(function(x){return x.id===taskId;});
   addHist('['+e.nome.slice(0,18)+'] "'+t.name+'" → '+(nst==='done'?'Concluído':'Pendente'),'manual');
   saveDB();patchTaskItemDOM(empId,taskId,nst);renderEmpGrid();renderDash();renderKanban();
+  try{supaSaveTarefa(empId,taskId,nst);supaSaveProjeto(e);}catch(ex){}
   // Tenta sync com ClickUp só se o projeto tem cuId E subtarefa mapeada
   var cuSubId=t.cuSubId||'';
   if(!cuSubId&&e.cuId&&CU_SUBTASK_MAP[e.cuId])cuSubId=CU_SUBTASK_MAP[e.cuId][taskId]||'';
@@ -1624,6 +1757,8 @@ function addHist(desc,type){
   var entry={ts:new Date().toISOString(),d:desc,author:currentUser?currentUser.name:'',authorId:currentUser?currentUser.id:null,type:type||'manual'};
   db.hist.unshift(entry);if(db.hist.length>150)db.hist.pop();
   renderHist();
+  // Sync com Supabase
+  try{supaAddHist(desc,type||'manual');}catch(e){}
 }
 
 function renderHist(){
@@ -2826,6 +2961,14 @@ registerPWA();
 loadDark();
 loadUser();
 loadDB();
+
+// Supabase: sincroniza dados da nuvem e ativa realtime
+setTimeout(function(){
+  try{
+    supaSync();        // carrega dados de todos os colaboradores
+    supaStartRealtime(); // escuta mudanças em tempo real
+  }catch(e){ console.warn('Supabase init:', e); }
+}, 1500);
 
 
 
