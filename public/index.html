@@ -2819,6 +2819,38 @@ function filterDMPeople(q){
 }
 
 
+// Fallback: todas as tarefas pendentes (sem filtro de atraso)
+function getPendingTasksForPersonAll(person){
+  var tasks = [];
+  var personName = person.name.toLowerCase();
+  var firstName = personName.split(' ')[0];
+  var resps = db.resps || DRESPS;
+  var personDepts = [];
+  Object.keys(resps).forEach(function(dk){
+    if(dk.indexOf('_email') !== -1) return;
+    var respVal = (resps[dk]||'').toLowerCase();
+    if(respVal.indexOf(personName) !== -1 || respVal.indexOf(firstName) !== -1){
+      personDepts.push(dk);
+    }
+  });
+  if(!personDepts.length) return [];
+  var seen = {};
+  Object.values(db.emps||{}).forEach(function(emp){
+    if(!emp||!emp.nome) return;
+    var empTasks = emp.tasks || {};
+    TASKS.forEach(function(t){
+      if(empTasks[t.id] === 'done') return;
+      if(personDepts.indexOf(t.dept) === -1) return;
+      var key = emp.id+'_'+t.id;
+      if(seen[key]) return;
+      seen[key] = true;
+      tasks.push({empId:emp.id,empNome:emp.nome,taskId:t.id,taskName:t.name,dept:t.dept,deptName:DEPTS[t.dept]||t.dept,faseAtraso:''});
+    });
+  });
+  tasks.sort(function(a,b){return a.empNome.localeCompare(b.empNome,'pt');});
+  return tasks.slice(0,8);
+}
+
 // Retorna índice da fase no SORD
 function faseIdx(status){
   var s=(status||'').toLowerCase().trim();
@@ -2885,6 +2917,29 @@ function renderTaskSuggestions(person){
   if(!panel || !list) return;
 
   var tasks = getPendingTasksForPerson(person);
+
+  // Debug: mostra no console o que foi encontrado
+  console.log('[DM Tasks] pessoa:', person.name);
+  console.log('[DM Tasks] depts encontrados:', (function(){
+    var resps=db.resps||DRESPS, pn=person.name.toLowerCase(), fn=pn.split(' ')[0], d=[];
+    Object.keys(resps).forEach(function(dk){
+      if(dk.indexOf('_email')!==-1)return;
+      var rv=(resps[dk]||'').toLowerCase();
+      if(rv.indexOf(pn)!==-1||rv.indexOf(fn)!==-1)d.push(dk+'='+resps[dk]);
+    });
+    return d;
+  })());
+  console.log('[DM Tasks] tarefas atrasadas encontradas:', tasks.length, tasks.slice(0,3));
+
+  // Se não há tarefas atrasadas, mostra todas as pendentes do dept
+  if(!tasks.length){
+    tasks = getPendingTasksForPersonAll(person);
+    if(tasks.length){
+      var title = document.querySelector('.dm-tasks-title');
+      if(title) title.innerHTML = '<i class="ti ti-checklist"></i>Tarefas pendentes desta pessoa';
+    }
+  }
+
   if(!tasks.length){ panel.style.display='none'; return; }
 
   list.innerHTML = '';
